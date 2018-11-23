@@ -41,7 +41,7 @@ train_meta %<>%
 	mutate(
 		target = as.factor(target),
 		ddf    = as.factor(ddf)
-		)
+	)
 
 test_meta %<>%
 	mutate(ddf    = as.factor(ddf))
@@ -52,7 +52,7 @@ train %<>%
 		detected = as.factor(detected),
 		date = as.Date(as.POSIXct('1858-11-17') + (mjd*24*60*60)),
 		mjd = NULL
-		)
+	)
 
 test %<>%
 	mutate(
@@ -80,70 +80,9 @@ tr_val_ind <- get_folds(train, "object_id", 5)
 tr_te <- bind_rows(tr,te) %>%
 	numerise_data()
 
+# Preprocessing -----------------------------------------------------------
 
-# XGB ---------------------------------------------------------------------
-dtest <- xgb.DMatrix(data = data.matrix(tr_te[-tri, ]))
-pred_tr <- rep(0, length(tri))
-pred_te <- 0
-
-train_tune <- tr_te[tri,]
-train_tune$target <- y_class
-tuning_scores <- tune_xgb(train_data = train_tune,
-													target_label = "target",
-													ntrees = 100,
-													objective = "multi:softmax",
-													eval_metric = "mlogloss",
-													fast = TRUE)
-rm(train_tune);gc()
-ts.plot(tuning_scores$scores)
-
-m <- which.max(tuning_scores$scores)
-currentSubsampleRate <- tuning_scores[["subsample"]][[m]]
-currentColsampleRate <- tuning_scores[["colsample_bytree"]][[m]]
-lr <- tuning_scores[["lr"]][[m]]
-mtd <- tuning_scores[["mtd"]][[m]]
-mcw <- tuning_scores[["mcw"]][[m]]
-
-ntrees <- 1e3
-
-p <- list(objective = "multi:softmax",
-					booster = "gbtree",
-					eval_metric = "mlogloss",
-					nthread = 4,
-					eta = lr/ntrees,
-					max_depth = mtd,
-					min_child_weight = 30,
-					gamma = 0,
-					subsample = currentSubsampleRate,
-					colsample_bytree = currentColsampleRate,
-					colsample_bylevel = 0.632,
-					alpha = 0,
-					lambda = 0,
-					nrounds = ntrees)
-
-for (i in seq_along(tr_val_ind)) {
-	cat("Group fold:", i, "\n")
-
-	tr_ind <- tr_val_ind[[i]]$tr
-	val_ind <- tr_val_ind[[i]]$val
-
-	dtrain <- xgb.DMatrix(data = data.matrix(tr_te[tr_ind, ]), label = y_class[tr_ind])
-	dval <- xgb.DMatrix(data = data.matrix(tr_te[val_ind, ]), label = y_class[val_ind])
-
-	set.seed(0)
-	cv <- xgb.train(p, dtrain, p$nrounds, list(val = dval), print_every_n = 50, early_stopping_rounds = 300)
-
-	pred_tr[val_ind] <- (predict(cv, dval, type = "prob"))
-	pred_te <- pred_te + (predict(cv, dtest, type = "prob"))
-
-	rm(dtrain, dval, tr_ind, val_ind)
-	gc()
-}
-
-pred_te <- ifelse(pred_te < 0, 0, pred_te / length(tr_val_ind))
-
-cols <- colnames(tr_te)
-imp <- xgb.importance(cols, model = cv) %>%
-	xgb.plot.importance(top_n = 25)
-
-rm(dtest, cv); gc()
+fn <- funs(mean, median, var, min, max, sum, n_distinct, .args = list(na.rm = TRUE))
+agg_tr_te <- tr_te %>%
+	group_by(object_id) %>%
+	summarise_all(fn)
