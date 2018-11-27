@@ -4,6 +4,10 @@ library(xgboost)
 library(caret)
 library(magrittr)
 
+library(rlist)
+library(rsample)
+
+
 numerise_data <- function(data, numeric_columns){
 	features <- colnames(data)
 
@@ -31,7 +35,7 @@ train_meta <- fread("data/training_set_metadata.csv")
 train      <- fread("data/training_set.csv")
 
 test_meta  <- fread("data/test_set_metadata.csv")
-test       <- fread("data/test_set.csv")
+test       <- fread("data/small_test.csv")
 
 
 
